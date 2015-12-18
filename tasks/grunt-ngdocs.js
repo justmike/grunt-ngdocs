@@ -9,7 +9,8 @@
 var reader = require('../src/reader.js'),
     ngdoc = require('../src/ngdoc.js'),
     path = require('path'),
-    vm = require('vm');
+    vm = require('vm'),
+    DOM = require('../src/dom.js').DOM;
 
 var repohosts = [
   { re: /https?:\/\/github.com\/([^\/]+\/[^\/]+)|git@github.com:(.*)/,
@@ -113,6 +114,28 @@ module.exports = function(grunt) {
 
     setup.pages = _.union(setup.pages, ngdoc.metadata(reader.docs));
 
+    if (options.generatePartialsTodoIndex || options.doNotGenerateStandardIndexHtml) {
+      var foundSectionTodo = setup.pages.some(function(page) {
+        return page.section === 'todo';
+      });
+      if (!foundSectionTodo) {
+        setup.pages.push({
+          "section": "todo",
+          "id": "index",
+          "shortName": "TODO",
+          "type": "overview",
+          "moduleName": "TODO",
+          "sourceFile": "docs/content/todo/",
+          "shortDescription": "To Dos",
+          "keywords": "overview todo todos"
+        });
+      }
+    }
+
+    if (options.generatePartialsTodoIndex) {
+      generatePartialsTodoIndex(options, parseTodos(reader.docs));
+    }
+
     if (options.navTemplate) {
       options.navContent = grunt.template.process(grunt.file.read(options.navTemplate));
     } else {
@@ -134,7 +157,126 @@ module.exports = function(grunt) {
     try {
       pkg = grunt.file.readJSON('package.json');
     } catch (e) {}
-    return pkg || {};
+    return pkg || {};
+  }
+
+  function generatePartialsTodoIndex(options, todosByFile) {
+    var todoFilePath = path.resolve(options.dest, 'partials', 'todo', 'index.html');
+    var dom = new DOM();
+    if (todosByFile && todosByFile.todoCount > 0) {
+      dom.h('To Do', function() {
+        dom.p(function() {
+          dom.text(todosByFile.todoCount + ' ');
+          dom.tag('code', '@todo');
+          dom.text('items found in ' + todosByFile.fileCount + ' files.');
+        });
+
+        Object.keys(todosByFile.todosByFile).sort().forEach(function(fileName) {
+          var todoFile = todosByFile.todosByFile[fileName];
+          var fileSections = todoFile.sections;
+
+          dom.h(todoFile.fileName, function() {
+            // always show the "file" section first
+            var sections = Object.keys(fileSections).sort();
+            var fileSectionIndex = sections.indexOf('file');
+            if (fileSectionIndex) {
+              sections.splice(0, 0, sections.splice(fileSectionIndex, 1)[0]); // http://stackoverflow.com/a/2440723/12293
+            }
+            sections.forEach(function(sectionName) {
+              var fileSection = fileSections[sectionName];
+
+              if (fileSection.sectionName !== 'file') {
+                dom.tag('h3', fileSection.sectionName);
+              }
+              dom.tag('ul', function() {
+                fileSection.todos.forEach(function(todo) {
+                  dom.tag('li', function() {
+                    // don't htmlEscape() the output
+                    dom.out.push(todo.full);
+                  });
+                });
+              });
+            });
+          });
+        });
+      });
+      grunt.log.writeln('Generated "partials/todo/index.html" (' + todosByFile.todoCount + ' items in ' + todosByFile.fileCount + ' files)');
+    } else {
+      dom.h('To Do', function() {
+        dom.p(function() {
+          dom.text('You have no ');
+          dom.tag('code', '@todo');
+          dom.text('items!');
+        });
+      });
+      grunt.log.writeln('Generated empty "partials/todo/index.html" (no "@todo" items found!)');
+    }
+
+    grunt.file.write(todoFilePath, dom.toString());
+  }
+
+  function parseTodos(docs) {
+    var todosByFile = {};
+    var todoCount = 0;
+    docs.forEach(function(doc, fileIndex) {
+      var todoFile = todosByFile[doc.file];
+      if (!todoFile) {
+        todoFile = {
+          fileName: doc.file,
+          sections: {}
+        };
+      }
+      var fileSections = todoFile.sections;
+      var fileSection;
+
+      var sectionName;
+
+      if (doc.todos.length > 0) {
+        sectionName = 'file';
+        fileSection = fileSections[sectionName];
+        if (!fileSection) {
+          fileSection = {
+            sectionName: sectionName,
+            todos: []
+          };
+          fileSections[sectionName] = fileSection;
+          todosByFile[doc.file] = todoFile;  // initialize
+          todoFile.sections = fileSections;
+          todoFile.sequence = fileIndex;
+        }
+
+        doc.todos.forEach(function(todo, todoIndex) {
+          fileSection.todos.push(todo);
+          ++todoCount;
+        });
+      }
+      doc.methods.forEach(function(method) {
+        sectionName = method.name;
+        fileSection = fileSections[sectionName];
+        method.todos.forEach(function(todo, todoIndex) {
+          if (!fileSection) {
+            fileSection = {
+              sectionName: sectionName,
+              todos: []
+            };
+            fileSections[sectionName] = fileSection;
+            todosByFile[doc.file] = todoFile;  // initialize
+            todoFile.sections = fileSections;
+            todoFile.sequence = fileIndex;
+          }
+          fileSection.todos.push(todo);
+          ++todoCount;
+        });
+      });
+    });
+    var fileCount = Object.keys(todosByFile).length;
+    if (fileCount > 0) {
+      return {
+        fileCount: fileCount,
+        todoCount: todoCount,
+        todosByFile: todosByFile
+      };
+    }
   }
 
   function makeLinkFn(tmpl, values) {

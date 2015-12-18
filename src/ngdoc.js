@@ -74,6 +74,7 @@ function Doc(text, file, startLine, endLine, options) {
   this.events = this.events || [];
   this.links = this.links || [];
   this.anchors = this.anchors || [];
+  this.todos = this.todos || [];
 }
 Doc.METADATA_IGNORE = (function() {
   var words = fs.readFileSync(__dirname + '/ignore.words', 'utf8');
@@ -367,7 +368,7 @@ Doc.prototype = {
     self.text.split(NEW_LINE).forEach(function(line){
       if ((match = line.match(/^\s*@(\w+)(\s+(.*))?/))) {
         // we found @name ...
-        // if we have existing name
+        // first, flush to store atText if we have existing atName
         flush();
         atName = match[1];
         atText = [];
@@ -476,10 +477,49 @@ Doc.prototype = {
           self.private = true;
         } else if(atName == 'readonly') {
           self.readonly = true;
+        } else if(atName == 'todo') {
+          todosPush(text);
+        } else if(atName == 'ngdoc') {
+          match = atText[0].match(/^@todo\b/);
+          if (match) {
+            self.ngdoc = 'todo';
+            self.name = '@todo';
+            todosPush(text.replace(/^@todo\s+/, ''));
+          } else {
+            self[atName] = text;
+          }
         } else {
           self[atName] = text;
         }
       }
+    }
+
+    function todosPush(text) {
+      var parsed = text
+        .replace(/{@label\s+([^\}]+)?}/g, function(_, label) {
+          // className strings can be e.g., "type: bug" and are converted to "type-bug"
+          var className = label.replace(/[^_a-zA-Z0-9-]+/g, '-');
+          return '<span class="' + 'todo-label' + ' ' + className + '">' +
+            label +
+            '</span>';
+        })
+        .replace(/{@link\s+([^\s}]+)\s*([^}]*?)\s*}/g, function(_all, url, title){
+          return '<a href="' + url + '" target="_blank">' + title + '</a>';
+        })
+        ;
+
+      self.todos.push({
+        codeline: self.codeline,
+        file: self.file,
+        full: self.markdown(
+          '<span>L' + self.line + '</span>: ' +
+          parsed
+        ),
+        line: self.line,
+        name: self.name,
+        parsed: self.markdown(parsed),
+        raw: text
+      });
     }
   },
 
@@ -657,6 +697,24 @@ Doc.prototype = {
       dom.html('</td>');
       dom.html('</tr>');
       dom.html('</table>');
+    }
+  },
+
+  html_usage_todo: function(dom) {
+    // noop. we're filtering these out from "metadata()" since they don't make sense
+  },
+
+  html_usage_todos: function(dom) {
+    var self = this;
+    if (self.todos.length) {
+      dom.html('<h2>To Do</h2>');
+      dom.tag('ul', function() {
+        return self.todos.forEach(function(todo){
+          dom.out.push('<li>');
+          dom.out.push(todo.full);
+          dom.out.push('</li>');
+        });
+      });
     }
   },
 
@@ -920,6 +978,7 @@ Doc.prototype = {
             method.html_usage_parameters(dom);
             self.html_usage_this(dom);
             method.html_usage_returns(dom);
+            method.html_usage_todos(dom);
 
             dom.h('Example', method.example, dom.html);
           //});
@@ -948,6 +1007,7 @@ Doc.prototype = {
           }
           property.html_usage_returns(dom);
           dom.h('Example', property.example, dom.html);
+          property.html_usage_todos(dom);
         });
       });
     }
@@ -972,7 +1032,15 @@ Doc.prototype = {
             self.html_usage_this(dom);
 
             dom.h('Example', event.example, dom.html);
+            self.html_usage_todos(dom);
           });
+        });
+      });
+    }
+    if (self.todos.length) {
+      dom.div({class:'member todo'}, function(){
+        dom.h('To Do', self.todos, function(todo){
+          dom.html(todo.full);
         });
       });
     }
@@ -1115,6 +1183,9 @@ function scenarios(docs){
 function metadata(docs){
   var pages = [];
   docs.forEach(function(doc){
+    if (doc.id === '@todo') {
+      return;
+    }
     var path = (doc.name || '').split(/(\:\s*)/);
     for ( var i = 1; i < path.length; i++) {
       path.splice(i, 1);
@@ -1132,6 +1203,7 @@ function metadata(docs){
       shortName: shortName,
       type: doc.ngdoc,
       moduleName: doc.moduleName,
+      sourceFile: doc.file,
       shortDescription: doc.shortDescription(),
       keywords: doc.keywords()
     });
@@ -1295,6 +1367,9 @@ function indentCode(text, spaceCount) {
 }
 
 //////////////////////////////////////////////////////////
+/**
+ * move anything that is a methodOf/propertyOf/eventOf to the parent
+ */
 function merge(docs){
   var byFullId = {};
 

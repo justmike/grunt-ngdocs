@@ -1,3 +1,31 @@
+# 0.2.10-beta.2 (2015-12-18)
+
+## Features
+### docs
+
+* add "@todo" attribute for partials and new aggregate
+* -- put a "@todo" inside any "@ngdoc" comment block
+* -- create a standalone "documentation comment block" anywhere containing just "@ngdoc @todo ..."
+* -- produces a new "To Do" section displayed last on any associated partial page
+* -- produces an aggregate page where all "@todo" items will be displayed in one list at "/docs/index.html#/todo" URL. Enabled by updating your "Gruntfile.js" as follows:
+```
+    ngdocs: {
+        api: {
+            options: {
+                generatePartialsTodoIndex: true
+        // ...        
+        todo: {
+            api: false,
+            options: {
+                doNotGenerateStandardIndexHtml: true
+            },
+            src: [],
+            title: 'To Do'
+        }
+    }
+```
+
+
 # 0.2.10-beta.1 (2015-12-10)
 
 ## Features

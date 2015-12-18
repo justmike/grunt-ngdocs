@@ -29,12 +29,17 @@ function processJsFile(content, file, section, options) {
 
   lines.forEach(function(line, lineNumber){
     lineNumber++;
+    line = line.replace(/[\n\r]*/gm, '');
     // is the comment starting?
     if (!inDoc && (match = line.match(/^\s*\/\*\*\s*(.*)$/))) {
       line = match[1];
       inDoc = true;
       text = [];
       startingLine = lineNumber;
+    }
+    // is the comment add text
+    if (inDoc){
+      text.push(line.replace(/\s*\*\//, '').replace(/^\s*\*\s?/, ''));
     }
     // are we done?
     if (inDoc && line.match(/\*\//)) {
@@ -46,10 +51,6 @@ function processJsFile(content, file, section, options) {
       }
       doc = null;
       inDoc = false;
-    }
-    // is the comment add text
-    if (inDoc){
-      text.push(line.replace(/^\s*\*\s?/, ''));
     }
   });
   return docs;

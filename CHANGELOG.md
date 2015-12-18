@@ -1,3 +1,22 @@
+# 0.2.10-beta.1 (2015-12-10)
+
+## Features
+### docs
+
+* add "page-type-TYPE" to parent div of partial, to facilitate css changes per page-type
+* show "Class" label type-hint for @constructor
+* show "private" label type-hint for @private
+* show "readononly" label type-hint for @readononly
+
+
+## Bug fixes
+### docs
+
+* add display of missing property type for @property
+
+
+
+
 # 0.2.9 (2015-08-12)
 
 ## Features

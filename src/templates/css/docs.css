@@ -242,6 +242,12 @@ ul.events > li > h3 {
   font-family: monospace;
 }
 
+ul.methods > li > h3 > span.label.type-hint,
+ul.properties > li > h3 > span.label.type-hint,
+ul.properties > li > h3 > a.label.type-hint {
+  margin-right: 8px;
+}
+
 .center {
   display: block;
   margin: 2em auto;

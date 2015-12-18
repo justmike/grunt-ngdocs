@@ -390,7 +390,7 @@ Doc.prototype = {
         this.shortName = this.name.split(".").pop().trim();
       }
     }
-    
+
     this.id = this.id || // if we have an id just use it
       (this.ngdoc === 'error' ? this.name : '') ||
       (((this.file||'').match(/.*(\/|\\)([^(\/|\\)]*)\.ngdoc/)||{})[2]) || // try to extract it from file name
@@ -472,6 +472,10 @@ Doc.prototype = {
           self.target = match[2];
         } else if(atName == 'constructor') {
           self.constructor = true;
+        } else if(atName == 'private') {
+          self.private = true;
+        } else if(atName == 'readonly') {
+          self.readonly = true;
         } else {
           self[atName] = text;
         }
@@ -904,30 +908,46 @@ Doc.prototype = {
               class: 'view-source icon-eye-open'
             }, ' ');
           }
+          var privatePrefix = '';
+          if (method.private) {
+            privatePrefix = '<span class="' + self.prepare_type_hint_class_name('private') + '">private</span>';
+          }
           //filters out .IsProperty parameters from the method signature
           var signature = (method.param || []).filter(function(e) { return e.isProperty !== true; }).map(property('name'));
-          dom.h(method.shortName + '(' + signature.join(', ') + ')', method, function() {
+          dom.html('<h1>' + privatePrefix + method.shortName + '(' + signature.join(', ') + ')' + '</h1>');
+          //dom.h(method.shortName + '(' + signature.join(', ') + ')', method, function() {
             dom.html(method.description);
             method.html_usage_parameters(dom);
             self.html_usage_this(dom);
             method.html_usage_returns(dom);
 
             dom.h('Example', method.example, dom.html);
-          });
+          //});
         });
       });
     }
     if (self.properties.length) {
       dom.div({class:'member property'}, function(){
         dom.h('Properties', self.properties, function(property){
-          dom.h(property.shortName, function() {
-            dom.html(property.description);
-            if (!property.html_usage_returns) {
-              console.log(property);
-            }
-            property.html_usage_returns(dom);
-            dom.h('Example', property.example, dom.html);
-          });
+          var readonlyPrefix = '';
+          if (property.readonly) {
+            readonlyPrefix = '<span class="' + self.prepare_type_hint_class_name('readonly') + '">readonly</span>';
+          }
+          var propertyTypes = property.type.split(/\|(?![\(\)\w\|\s]+>)/);
+          var propertyPrefix = '';
+          for(var j=0;j<propertyTypes.length;j++) {
+            var propertyType = propertyTypes[j];
+            propertyPrefix += '<a href="" class="' + self.prepare_type_hint_class_name(propertyType) + '">';
+            propertyPrefix += propertyType;
+            propertyPrefix += '</a>';
+          }
+          dom.html('<h1>' + readonlyPrefix + propertyPrefix + property.shortName + '</h1>');
+          dom.html(property.description);
+          if (!property.html_usage_returns) {
+            console.log(property);
+          }
+          property.html_usage_returns(dom);
+          dom.h('Example', property.example, dom.html);
         });
       });
     }
@@ -1008,6 +1028,12 @@ function title(doc) {
     // makeTitle('Foo', 'directive', 'module', 'ng') ->
     //    Foo is a directive in module ng
     return function () {
+      if (doc.private) {
+        this.tag('span', {class: 'label type-hint type-hint-private'}, 'private');
+      }
+      if (doc.constructor === true) {
+        this.tag('span', {class: 'label type-hint type-hint-class'}, 'Class');
+      }
       this.tag('code', name);
       this.tag('div', function () {
         this.tag('span', {class: 'hint'}, function () {
